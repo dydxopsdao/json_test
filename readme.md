@@ -1,0 +1,1 @@
+Use python import_json.py dydx_env.json dos_env.json to run
