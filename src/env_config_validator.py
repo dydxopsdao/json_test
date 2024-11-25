@@ -22,6 +22,8 @@ class EnvConfigValidator:
         """
         self.utils = ValidationUtils()
         self.console = Console()
+        self.reference_path = reference_path
+        self.deployment_path = deployment_path
 
         # Load JSON data and line numbers
         self.reference_config, self.reference_line_numbers = load_json(
@@ -56,9 +58,18 @@ class EnvConfigValidator:
                 - A list of issues identified during validation.
         """
         issues = validate_structure(
-            self.reference_config, self.deployment_config, self.utils, self.reference_line_numbers
+            self.reference_config,
+            self.deployment_config,
+            self.utils,
+            self.reference_line_numbers,
         )
-        create_visual_diff(issues, self.console, self.utils)
+        create_visual_diff(
+            issues,
+            self.console,
+            self.utils,
+            file_1_name=self.reference_path.name,
+            file_2_name=self.deployment_path.name,
+        )
         return len(issues) == 0, issues
 
 
