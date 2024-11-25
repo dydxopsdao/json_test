@@ -31,7 +31,8 @@ def validate_structure(
         dep_keys = set(dep.keys())
 
         for key in ref_keys:
-            if utils.is_test_or_staging_key(key):
+            # Skip test/staging keys and "comment" keys
+            if utils.is_test_or_staging_key(key) or key.lower() == "comment":
                 continue
 
             matching_key = _find_matching_key(key, dep_keys)
