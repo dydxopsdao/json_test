@@ -20,7 +20,7 @@ pip install rich
 
 2. Run validation:
 ```bash
-python import_json.py reference_env.json validation_env.json
+python env_config_validator.py reference_env.json validation_env.json
 ```
 
 ## Validation Rules
@@ -36,10 +36,6 @@ The validator provides detailed error information including:
 - Missing keys/sections
 - Value mismatches
 - Context for expected values
-
-## License
-
-MIT License
 
 ## Contributing
 
