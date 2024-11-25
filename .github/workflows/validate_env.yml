@@ -82,4 +82,5 @@ jobs:
 
       - name: Validate JSON Files
         run: |
-          python env_config_validator.py dydx_env.json dos_env.json
+          cd json-tester/src  # Navigate to the correct directory
+          python env_config_validator.py ../../dydx_env.json ../../dos_env.json
