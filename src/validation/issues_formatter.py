@@ -10,6 +10,8 @@ def create_visual_diff(
     issues: List[Tuple[str, str, Dict]],
     console: Console,
     utils: Any,
+    file_1_name: str,
+    file_2_name: str,
 ) -> None:
     """
     Generates a visual representation of validation issues.
@@ -18,8 +20,20 @@ def create_visual_diff(
         issues (List[Tuple[str, str, Dict]]): List of issues with their paths and context.
         console (Console): Rich Console instance for rendering output.
         utils (Any): ValidationUtils instance for utility functions.
+        file_1_name (str): Name of the first JSON file being compared.
+        file_2_name (str): Name of the second JSON file being compared.
     """
     issue_groups = {"Missing": [], "Mismatch": [], "Structure": []}
+
+    # Output the names of the files being compared
+    console.print("\n")
+    console.print(
+        Panel.fit(
+            f"Comparing files:\n[green]{file_1_name}[/green] vs [yellow]{file_2_name}[/yellow]",
+            style="bold blue",
+        )
+    )
+    console.print("\n")
 
     for issue, path, context in issues:
         if "Missing" in issue:
