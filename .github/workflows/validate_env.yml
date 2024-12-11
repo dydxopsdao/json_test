@@ -60,7 +60,7 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install Dependencies
-        run: pip install rich requests
+        run: pip install rich requests beautifulsoup4
 
       - name: Download Reference JSON
         run: |
