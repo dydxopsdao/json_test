@@ -60,7 +60,7 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install Dependencies
-        run: pip install rich
+        run: pip install rich requests
 
       - name: Download Reference JSON
         run: |
