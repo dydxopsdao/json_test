@@ -23,7 +23,7 @@ API_ENDPOINTS = {
     "execute-api.ap-northeast-1.amazonaws.com",
     "infrastructure-34d.workers.dev",
     "api.mainnet-beta.solana.com",
-    "https://cloud.chaoslabs.co/",
+    "cloud.chaoslabs.co",
     # RPC and Validator Endpoints
     "rpc.osmosis.zone",
     "dydx-dao-rpc.polkachu.com",
