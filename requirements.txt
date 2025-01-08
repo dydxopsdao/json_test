@@ -1,1 +1,3 @@
-rich==13.6.0  # For console rendering
+requests
+beautifulsoup4
+rich==13.6.0
