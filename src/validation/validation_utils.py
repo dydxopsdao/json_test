@@ -1,7 +1,6 @@
 import json
 import re
-from typing import Optional, Any, List, Tuple
-import requests
+from typing import Optional, Any
 from constants import URL_EXCEPTION_LIST, IGNORE_VALUE_MATCH
 
 
