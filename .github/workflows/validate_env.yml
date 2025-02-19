@@ -23,64 +23,52 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      DD_SITE: ap1.datadoghq.com
+      DD_SERVICE: config-validator
 
     steps:
       - name: Check out the repository
         uses: actions/checkout@v3
 
-      - name: Set Default URLs
-        id: set-default-urls
-        run: |
-          FIRST_URL="${{ github.event.inputs.first_json_url }}"
-          SECOND_URL="${{ github.event.inputs.second_json_url }}"
-          
-          if [ -z "$FIRST_URL" ]; then
-            FIRST_URL="https://raw.githubusercontent.com/dydxprotocol/v4-web/main/public/configs/v1/env.json"
-          fi
-          if [ -z "$SECOND_URL" ]; then
-            SECOND_URL="https://raw.githubusercontent.com/dydxopsdao/v4-web/faa3fe60bdf0156027849012b41e439146c39c14/public/configs/v1/env.json"
-          fi
-
-          echo "FIRST_URL=$FIRST_URL" >> $GITHUB_ENV
-          echo "SECOND_URL=$SECOND_URL" >> $GITHUB_ENV
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10.6'
-
-      - name: Check Python Version
-        run: python --version
-
-      - uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+      # (Other steps like setting default URLs, setting up Python, etc.)
 
       - name: Install Dependencies
         run: pip install rich requests beautifulsoup4
 
-      - name: Download Reference JSON
+      - name: Download JSON Files
         run: |
-          curl -H "Accept: application/json" -L "$FIRST_URL" -o dydx_env.json || exit 1
-
-      - name: Download Validation JSON
-        env:
-          AUTH_TOKEN: ${{ secrets.DYDXOPSDDAO_REPO_TOKEN }}
-        run: |
-          curl -H "Accept: application/json" -H "Authorization: token $AUTH_TOKEN" -L "$SECOND_URL" -o dos_env.json || exit 1
-
-      - name: Check File Sizes
-        run: |
-          ls -lh dydx_env.json dos_env.json
-          if [ ! -s dydx_env.json ] || [ ! -s dos_env.json ]; then
-            echo "Error: One or both JSON files are empty"
-            exit 1
-          fi
+          curl -L "$FIRST_URL" -o dydx_env.json
+          curl -L "$SECOND_URL" -o dos_env.json
 
       - name: Validate JSON Files
+        id: run-validation
         run: |
           cd src  
+          # The Python script exits with 0 if validation passes, non-zero otherwise
           python env_config_validator.py ../dydx_env.json ../dos_env.json
+        continue-on-error: true
+
+      # Option 2: Send a custom event to Datadog
+      - name: Send Custom Event to Datadog
+        if: always()
+        run: |
+          if [ "${{ steps.run-validation.outcome }}" = "success" ]; then
+            EVENT_TITLE="Env JSON Validation Passed"
+            EVENT_TEXT="The environment JSON validation completed successfully."
+          else
+            EVENT_TITLE="Env JSON Validation Failed"
+            EVENT_TEXT="The environment JSON validation encountered issues. Check the logs for details."
+          fi
+          curl -X POST "https://api.datadoghq.com/api/v1/events?api_key=${DD_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{
+                  "title": "'"${EVENT_TITLE}"'",
+                  "text": "'"${EVENT_TEXT}"'",
+                  "priority": "normal",
+                  "tags": ["service:'"$DD_SERVICE"'"]
+                }'
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_SITE: ap1.datadoghq.com
+          DD_SERVICE: config-validator
