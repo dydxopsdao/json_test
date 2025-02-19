@@ -31,25 +31,64 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v3
 
-      # (Other steps like setting default URLs, setting up Python, etc.)
+      - name: Set Default URLs
+        id: set-default-urls
+        run: |
+          FIRST_URL="${{ github.event.inputs.first_json_url }}"
+          SECOND_URL="${{ github.event.inputs.second_json_url }}"
+          
+          if [ -z "$FIRST_URL" ]; then
+            FIRST_URL="https://raw.githubusercontent.com/dydxprotocol/v4-web/main/public/configs/v1/env.json"
+          fi
+          if [ -z "$SECOND_URL" ]; then
+            SECOND_URL="https://raw.githubusercontent.com/dydxopsdao/v4-web/faa3fe60bdf0156027849012b41e439146c39c14/public/configs/v1/env.json"
+          fi
+
+          echo "FIRST_URL=$FIRST_URL" >> $GITHUB_ENV
+          echo "SECOND_URL=$SECOND_URL" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10.6'
+
+      - name: Check Python Version
+        run: python --version
+
+      - uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install Dependencies
         run: pip install rich requests beautifulsoup4
 
-      - name: Download JSON Files
+      - name: Download Reference JSON
         run: |
-          curl -L "$FIRST_URL" -o dydx_env.json
-          curl -L "$SECOND_URL" -o dos_env.json
+          curl -H "Accept: application/json" -L "$FIRST_URL" -o dydx_env.json || exit 1
+
+      - name: Download Validation JSON
+        env:
+          AUTH_TOKEN: ${{ secrets.DYDXOPSDDAO_REPO_TOKEN }}
+        run: |
+          curl -H "Accept: application/json" -H "Authorization: token $AUTH_TOKEN" -L "$SECOND_URL" -o dos_env.json || exit 1
+
+      - name: Check File Sizes
+        run: |
+          ls -lh dydx_env.json dos_env.json
+          if [ ! -s dydx_env.json ] || [ ! -s dos_env.json ]; then
+            echo "Error: One or both JSON files are empty"
+            exit 1
+          fi
 
       - name: Validate JSON Files
         id: run-validation
         run: |
           cd src  
-          # The Python script exits with 0 if validation passes, non-zero otherwise
           python env_config_validator.py ../dydx_env.json ../dos_env.json
-        continue-on-error: true
 
-      # Option 2: Send a custom event to Datadog
       - name: Send Custom Event to Datadog
         if: always()
         run: |
