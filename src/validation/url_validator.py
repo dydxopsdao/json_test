@@ -9,6 +9,10 @@ from bs4 import BeautifulSoup
 from validation.validation_utils import ValidationUtils
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from constants import MAINNET_PATTERNS
+import sys
+from pathlib import Path
+from rich.console import Console
+import time  # Import the time module for sleep
 
 
 class URLValidator:
@@ -22,7 +26,9 @@ class URLValidator:
         self.APP_STORE_CONFIG = APP_STORE_CONFIG
 
         # Timeout for URL requests (in seconds)
-        self.TIMEOUT = 15
+        self.TIMEOUT = 30  # Keep original timeout for each attempt
+        self.MAX_RETRIES = 3  # Number of attempts
+        self.RETRY_DELAY = 2  # Seconds to wait between retries
 
         # Initialize logging
         self.logger = logging.getLogger("URLValidator")
@@ -124,7 +130,7 @@ class URLValidator:
 
     def _check_single_url(self, url: str, path: str = "") -> List[Dict[str, Any]]:
         """
-        Validate a single URL and return any issues found.
+        Validate a single URL and return any issues found, with retry logic for timeouts.
         """
         issues = []
 
@@ -140,62 +146,80 @@ class URLValidator:
         if app_store_issues or "apps.apple.com" in url or "play.google.com" in url:
             return app_store_issues  # Skip further checks for App Store URLs
 
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-                "Connection": "keep-alive",
-            }
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Connection": "keep-alive",
+        }
+        session = requests.Session()
+        last_exception = None
 
-            # Perform HTTP request validation
-            session = requests.Session()
-            response = session.get(
-                url, timeout=self.TIMEOUT, headers=headers, allow_redirects=True
-            )
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                response = session.get(
+                    url, timeout=self.TIMEOUT, headers=headers, allow_redirects=True
+                )
 
-            if response.status_code != 200:
+                if response.status_code == 200:
+                    # Success! No issues to report for this check.
+                    return []
+                else:
+                    # Got a non-200 status code, report immediately, no retry needed.
+                    return [
+                        {
+                            "path": path,
+                            "url": url,
+                            "type": "status_code",
+                            "details": f"Received status code {response.status_code}",
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    ]
+
+            except requests.Timeout:
+                last_exception = requests.Timeout(f"Request timed out after {self.TIMEOUT} seconds on attempt {attempt + 1}")
+                self.logger.warning(f"Attempt {attempt + 1}/{self.MAX_RETRIES} timed out for URL: {url}. Retrying in {self.RETRY_DELAY}s...")
+                if attempt < self.MAX_RETRIES - 1:
+                    time.sleep(self.RETRY_DELAY)
+                continue  # Go to the next attempt
+
+            except requests.RequestException as e:
+                # For other request errors (DNS, connection refused, etc.), fail immediately.
                 return [
                     {
                         "path": path,
                         "url": url,
-                        "type": "status_code",
-                        "details": f"Received status code {response.status_code}",
+                        "type": "request_error",
+                        "details": str(e),
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                ]
+            except Exception as e:
+                # For unexpected errors, fail immediately.
+                return [
+                    {
+                        "path": path,
+                        "url": url,
+                        "type": "unexpected_error",
+                        "details": str(e),
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                 ]
 
-        except requests.Timeout:
-            return [
+        # If loop finished, all retries timed out
+        if isinstance(last_exception, requests.Timeout):
+             return [
                 {
                     "path": path,
                     "url": url,
                     "type": "timeout",
-                    "details": f"Request timed out after {self.TIMEOUT} seconds",
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-            ]
-        except requests.RequestException as e:
-            return [
-                {
-                    "path": path,
-                    "url": url,
-                    "type": "request_error",
-                    "details": str(e),
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-            ]
-        except Exception as e:
-            return [
-                {
-                    "path": path,
-                    "url": url,
-                    "type": "unexpected_error",
-                    "details": str(e),
+                    # Report the timeout from the last attempt
+                    "details": f"Request timed out after {self.TIMEOUT} seconds after {self.MAX_RETRIES} attempts",
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             ]
 
+        # Should not be reached if logic is correct, but return empty list as fallback
         return []
 
     def extract_urls(
